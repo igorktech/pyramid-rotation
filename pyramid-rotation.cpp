@@ -12,12 +12,12 @@ using namespace std;
 #include <windows.h>
 #include <cwchar>
 
-int screen_width = 120; // Console Screen Size X (columns)
-int screen_height = 40; // Console Screen Size Y (rows)
+int screen_width = 240; // Console Screen Size X (columns)
+int screen_height = 80; // Console Screen Size Y (rows)
 
 float alpha = 0, beta = 0, gamma = 0;
 float view_angle = 60;
-float camera_arm = 100;
+float camera_arm = 150;
 float dist_to_disp = 50;
 float viewer = 10;
 float pyramid_face = 20;
@@ -51,7 +51,7 @@ float DisplayCoordX(float x, float y, float z, size_t width, size_t height, floa
 float DisplayCoordY(float x, float y, float z, size_t width, size_t height, float angle, float dist_disp, float cam_arm)
 {
 	z += (cam_arm - dist_disp) / 2 + dist_disp;
-	return (width / height) * y * (1 / tan(angle / 2)) * (1 / z); //( screen_height / screen_width ) *
+	return (width / height) * y * (1 / tan(angle / 2)) * (1 / z);
 }
 
 float DisplayCoordZ(float x, float y, float z, float dist_disp, float cam_arm)
@@ -91,10 +91,11 @@ struct Vec3d
 		y = (y + 1) * (T)height * 0.5;
 	}
 
-	void DisplayCoordXY(size_t width, size_t height, float angle, float dist_disp, float cam_arm)
+	void DisplayCoordXYZ(size_t width, size_t height, float angle, float dist_disp, float cam_arm)
 	{
 		x = DisplayCoordX(x, y, z, width, height, angle, dist_disp, cam_arm);
 		y = DisplayCoordY(x, y, z, width, height, angle, dist_disp, cam_arm);
+		z = DisplayCoordZ(x, y, z, dist_disp, cam_arm);
 	}
 
 	void Rotate(float alpha, float beta, float gamma)
@@ -102,15 +103,9 @@ struct Vec3d
 		T tmp_x = x;
 		T tmp_y = y;
 		T tmp_z = z;
-
-		x = tmp_y * sin(alpha) * sin(beta) * cos(gamma) - tmp_z * cos(alpha) * sin(beta) * cos(gamma) +
-			tmp_y * cos(alpha) * sin(gamma) + tmp_z * sin(alpha) * sin(gamma) + tmp_x * cos(beta) * cos(gamma);
-
-		y = tmp_y * cos(alpha) * cos(gamma) + tmp_x * sin(alpha) * cos(gamma) -
-			tmp_y * sin(alpha) * sin(beta) * sin(gamma) + tmp_z * cos(alpha) * sin(beta) * sin(gamma) -
-			tmp_x * cos(beta) * sin(gamma);
-
-		z = tmp_z * cos(alpha) * cos(beta) - tmp_y * sin(alpha) * cos(beta) + tmp_x * sin(beta);
+		x = RotCoordX(tmp_x, tmp_y, tmp_z, alpha, beta, gamma);
+		y = RotCoordY(tmp_x, tmp_y, tmp_z, alpha, beta, gamma);
+		z = RotCoordZ(tmp_x, tmp_y, tmp_z, alpha, beta, gamma);
 	}
 
 	Vec3d operator +(const Vec3d& other)
@@ -201,9 +196,9 @@ struct Triangle
 
 	void ComputeForScreen(size_t width, size_t height, float angle, float dist_disp, float cam_arm)
 	{
-		p_zero.DisplayCoordXY(width, height, angle, dist_disp, cam_arm);
-		p_one.DisplayCoordXY(width, height, angle, dist_disp, cam_arm);
-		p_two.DisplayCoordXY(width, height, angle, dist_disp, cam_arm);
+		p_zero.DisplayCoordXYZ(width, height, angle, dist_disp, cam_arm);
+		p_one.DisplayCoordXYZ(width, height, angle, dist_disp, cam_arm);
+		p_two.DisplayCoordXYZ(width, height, angle, dist_disp, cam_arm);
 	}
 
 	void sortY()
@@ -253,7 +248,7 @@ void TriangleConsole(Triangle<T>& triangle, wchar_t* screen_buffer, size_t width
                      short symbol)
 {
 	//we display object on a 2d XY display
-	//if (triangle.p_zero.y == triangle.p_one.y && triangle.p_zero.y == triangle.p_two.y) return; // i dont care about degenerate triangles
+	if (triangle.p_zero.y == triangle.p_one.y && triangle.p_zero.y == triangle.p_two.y) return;
 
 
 	//normalize for display
@@ -283,7 +278,7 @@ void TriangleConsole(Triangle<T>& triangle, wchar_t* screen_buffer, size_t width
 		}
 		for (int j = A.x; j <= B.x; j++)
 		{
-			if ((i < height) && (i >= 0) && (j < width) && (j >= 0))
+			if (((triangle.p_zero.y + i) < height) && ((triangle.p_zero.y + i) >= 0) && (j < width) && (j >= 0))
 			{
 				screen_buffer[int(triangle.p_zero.y + i) * width + int(j)] = symbol;
 				//memset(screen_buffer+ int(triangle.p_zero.y +i) * width+int(A.x), symbol, (B.x - A.x) * sizeof(wchar_t));
@@ -294,18 +289,17 @@ void TriangleConsole(Triangle<T>& triangle, wchar_t* screen_buffer, size_t width
 
 template <typename T>
 void PyramidConsole(Pyramid<T>& pyramid, wchar_t* screen_buffer, size_t width, size_t height, size_t view_angle,
-                    short symbol_one, short symbol_two, short symbol_three)
+                    short symbol_zero, short symbol_one, short symbol_two, short symbol_three)
 {
 	Triangle<T> tri_zero(pyramid.p_zero, pyramid.p_one, pyramid.p_two);
 	Triangle<T> tri_one(pyramid.p_zero, pyramid.p_one, pyramid.p_three);
 	Triangle<T> tri_two(pyramid.p_zero, pyramid.p_three, pyramid.p_two);
 	Triangle<T> tri_three(pyramid.p_one, pyramid.p_three, pyramid.p_two);
-	TriangleConsole(tri_three, screen_buffer, width, height, view_angle, 0x2591);
+	TriangleConsole(tri_three, screen_buffer, width, height, view_angle, symbol_zero);
 	TriangleConsole(tri_two, screen_buffer, width, height, view_angle, symbol_three);
 	TriangleConsole(tri_one, screen_buffer, width, height, view_angle, symbol_two);
 	TriangleConsole(tri_zero, screen_buffer, width, height, view_angle, symbol_one);
 }
-
 
 
 Pyramid<float> pyr(Vec3d<float>(0, 0, -60), Vec3d<float>(60, 60, 10), Vec3d<float>(-60, 30, 10),
@@ -337,27 +331,33 @@ void SetConsoleFont(int font_y)
 	SetCurrentConsoleFontEx(GetStdHandle(STD_OUTPUT_HANDLE), FALSE, &cfi);
 }
 
-void SetConsoleWindowSize(HANDLE hConsole, short x, short y)
+void SetConsoleWindowSize(HANDLE hConsole, int width, int height)
 {
 	COORD coord{};
-	coord.X = x;
-	coord.Y = y;
+	coord.X = width;
+	coord.Y = height;
 	SMALL_RECT rect{};
 	rect.Bottom = coord.X - 1;
 	rect.Right = coord.Y - 1;
-	SetConsoleScreenBufferSize(hConsole, coord);
 	SetConsoleWindowInfo(hConsole, true, &rect);
+
+	HWND console = GetConsoleWindow();
+	COORD window{};
+	window.X = GetConsoleFontSize(hConsole, 0).X;
+	window.Y = GetConsoleFontSize(hConsole, 0).Y;
+	MoveWindow(console, 0, 0, (coord.X + window.X) * window.X, coord.Y * window.Y,TRUE);
 }
 
 int main()
 {
-	SetConsoleFont(10);
+	SetConsoleFont(8);
 	// Create Screen Buffer
 	wchar_t* screen = new wchar_t[screen_width * screen_height];
 	HANDLE hConsole = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
 	SetConsoleTextAttribute(hConsole, console_color);
 	SetConsoleActiveScreenBuffer(hConsole);
 	SetConsoleWindowSize(hConsole, screen_width, screen_height);
+
 
 	DWORD dwBytesWritten = 0;
 
@@ -367,17 +367,16 @@ int main()
 
 	while (1)
 	{
-
 		tp2 = chrono::system_clock::now();
 		chrono::duration<float> elapsedTime = tp2 - tp1;
 		tp1 = tp2;
 		float fElapsedTime = elapsedTime.count();
 
-		alpha = 0.1*fElapsedTime;
+		//alpha = -5*fElapsedTime;
 		alpha = std::fmod(alpha, 360);
 		beta = fElapsedTime;
 		beta = std::fmod(beta, 360);
-		gamma = fElapsedTime;
+		gamma = 2 * fElapsedTime;
 		gamma = std::fmod(gamma, 360);
 
 
@@ -388,12 +387,12 @@ int main()
 
 
 		// Display Stats
-		swprintf_s(screen, 20, L"FPS=%3.2f ",
+		swprintf_s(screen, 16, L"FPS=%3.2f ",
 		           1.0f / fElapsedTime);
 
 
 		PyramidConsole<float>(pyr, screen, screen_width, screen_height,
-		                      view_angle, 0x2588, 0x2593, 0x2592);
+		                      view_angle, 0x2591, 0x2588, 0x2593, 0x2592);
 
 		// Display Frame
 		screen[screen_width * screen_height - 1] = '\0';
